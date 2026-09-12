@@ -24,6 +24,19 @@ async function api(path, options = {}) {
   return data;
 }
 
+function renderActivity(items) {
+  const list = $("activity");
+  if (!list) return;
+  if (!items || !items.length) {
+    list.innerHTML = "<li>No extraction output yet. Click Start to process PDFs already in invoices.</li>";
+    return;
+  }
+  list.innerHTML = items
+    .slice(0, 12)
+    .map((item) => `<li class="${escapeHtml(item.kind || "")}">${escapeHtml(item.message)}</li>`)
+    .join("");
+}
+
 function setWatcher(info) {
   const pill = $("watcher-pill");
   const hint = $("watcher-hint");
@@ -33,10 +46,11 @@ function setWatcher(info) {
   $("btn-stop").disabled = !info.running;
   if (info.invoices_dir) {
     hint.textContent = info.running
-      ? `Watching ${info.invoices_dir}`
-      : `Drop PDFs into ${info.invoices_dir}, or upload here.`;
+      ? `Watching ${info.invoices_dir}. Existing and new PDFs are ingested automatically.`
+      : `Drop PDFs into ${info.invoices_dir}, or upload here. Click Start to process files already in that folder.`;
   }
   if (info.message) hint.textContent = info.message;
+  renderActivity(info.activity);
 }
 
 function renderStats(stats) {
@@ -112,6 +126,7 @@ async function onUpload(file) {
 $("btn-start").addEventListener("click", async () => {
   try {
     setWatcher(await api("/api/watcher/start", { method: "POST" }));
+    await refresh();
   } catch (err) {
     $("watcher-hint").textContent = err.message;
   }
@@ -180,3 +195,7 @@ zone.addEventListener("drop", (e) => {
 refresh().catch((err) => {
   $("rows").innerHTML = `<tr><td colspan="4" class="empty">${escapeHtml(err.message)}</td></tr>`;
 });
+
+setInterval(() => {
+  refresh().catch(() => {});
+}, 2500);

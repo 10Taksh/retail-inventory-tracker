@@ -7,10 +7,17 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import deque
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from watchdog.events import FileCreatedEvent, FileMovedEvent, FileSystemEventHandler
+from watchdog.events import (
+    FileCreatedEvent,
+    FileModifiedEvent,
+    FileMovedEvent,
+    FileSystemEventHandler,
+)
 from watchdog.observers import Observer
 
 from db import init_db, upsert_product
@@ -23,9 +30,31 @@ INVOICES_DIR = Path(__file__).resolve().parent / "invoices"
 # Drop-in copies are often still being written when the create event fires.
 WRITE_SETTLE_SECONDS = 1.5
 
+_activity: deque[dict[str, Any]] = deque(maxlen=80)
+_activity_lock = threading.Lock()
+
+
+def record_activity(kind: str, message: str, extra: Optional[dict[str, Any]] = None) -> None:
+    item: dict[str, Any] = {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "kind": kind,
+        "message": message,
+    }
+    if extra:
+        item.update(extra)
+    with _activity_lock:
+        _activity.appendleft(item)
+    logger.info("%s", message)
+    print(message, flush=True)
+
+
+def get_activity() -> list[dict[str, Any]]:
+    with _activity_lock:
+        return list(_activity)
+
 
 class InvoiceHandler(FileSystemEventHandler):
-    """Process newly created or moved PDF invoices once."""
+    """Process newly created, modified, or moved PDF invoices once."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -33,6 +62,11 @@ class InvoiceHandler(FileSystemEventHandler):
         self._seen: set[str] = set()
 
     def on_created(self, event: FileCreatedEvent) -> None:  # type: ignore[override]
+        if event.is_directory:
+            return
+        self._handle(Path(str(event.src_path)))
+
+    def on_modified(self, event: FileModifiedEvent) -> None:  # type: ignore[override]
         if event.is_directory:
             return
         self._handle(Path(str(event.src_path)))
@@ -54,17 +88,18 @@ class InvoiceHandler(FileSystemEventHandler):
                 return
             self._seen.add(key)
 
+        record_activity("queued", f"Queued {path.name}")
         threading.Thread(target=self._process, args=(path,), daemon=True).start()
 
     def _process(self, path: Path) -> None:
         _wait_for_stable_file(path)
         try:
             ingest_pdf(path)
-        except Exception:
-            return
+        except Exception as exc:
+            record_activity("error", f"Failed {path.name}: {exc}")
 
 
-def ingest_pdf(path: Path) -> dict[str, int | str]:
+def ingest_pdf(path: Path) -> dict[str, Any]:
     """Extract products from a PDF and upsert them. Returns a small summary."""
     try:
         products = extract_products_from_pdf(path)
@@ -73,14 +108,17 @@ def ingest_pdf(path: Path) -> dict[str, int | str]:
         raise
 
     if not products:
-        logger.warning("No products extracted from %s", path.name)
-        return {"stored": 0, "extracted": 0, "file": path.name}
+        record_activity("empty", f"No products extracted from {path.name}")
+        return {"stored": 0, "extracted": 0, "file": path.name, "products": []}
 
     stored = 0
+    kept: list[dict[str, str]] = []
     for product in products:
         try:
             upsert_product(product["product_name"], product["expiry_date"])
             stored += 1
+            kept.append(product)
+            print(f"  {product['product_name']}  {product['expiry_date']}", flush=True)
         except Exception as exc:
             logger.warning(
                 "Skipping %r from %s: %s",
@@ -89,8 +127,17 @@ def ingest_pdf(path: Path) -> dict[str, int | str]:
                 exc,
             )
 
-    logger.info("Stored %s/%s products from %s", stored, len(products), path.name)
-    return {"stored": stored, "extracted": len(products), "file": path.name}
+    record_activity(
+        "ingest",
+        f"Stored {stored}/{len(products)} products from {path.name}",
+        {"file": path.name, "stored": stored, "extracted": len(products), "products": kept},
+    )
+    return {
+        "stored": stored,
+        "extracted": len(products),
+        "file": path.name,
+        "products": kept,
+    }
 
 
 def _wait_for_stable_file(path: Path, timeout: float = 15.0) -> None:
@@ -111,6 +158,16 @@ def _wait_for_stable_file(path: Path, timeout: float = 15.0) -> None:
     logger.warning("Timed out waiting for %s to finish writing", path.name)
 
 
+def scan_existing_pdfs(directory: Optional[Path] = None, handler: Optional[InvoiceHandler] = None) -> int:
+    """Queue every PDF already in the invoices folder."""
+    watch_dir = directory or INVOICES_DIR
+    worker = handler or InvoiceHandler()
+    pdfs = sorted(p for p in watch_dir.glob("*.pdf") if p.is_file())
+    for pdf in pdfs:
+        worker._handle(pdf)
+    return len(pdfs)
+
+
 def start_watcher(
     directory: Optional[Path] = None,
     blocking: bool = False,
@@ -118,17 +175,22 @@ def start_watcher(
     """
     Start monitoring ``directory`` (default: ./invoices).
 
-    Returns the Observer so the CLI can stop it later. When ``blocking`` is
-    True, this call runs until KeyboardInterrupt.
+    Also queues PDFs that are already in the folder (watchdog only sees new events).
     """
     watch_dir = directory or INVOICES_DIR
     watch_dir.mkdir(parents=True, exist_ok=True)
     init_db()
 
+    handler = InvoiceHandler()
     observer = Observer()
-    observer.schedule(InvoiceHandler(), str(watch_dir), recursive=False)
+    observer.schedule(handler, str(watch_dir), recursive=False)
     observer.start()
-    logger.info("Watching %s for new PDFs", watch_dir)
+    queued = scan_existing_pdfs(watch_dir, handler)
+    record_activity(
+        "watch",
+        f"Watching {watch_dir} — queued {queued} existing PDF(s)",
+        {"invoices_dir": str(watch_dir), "queued": queued},
+    )
 
     if blocking:
         try:
@@ -145,4 +207,4 @@ def stop_watcher(observer: Observer) -> None:
     """Stop a previously started observer."""
     observer.stop()
     observer.join(timeout=5)
-    logger.info("Invoice watcher stopped")
+    record_activity("watch", "Invoice watcher stopped")

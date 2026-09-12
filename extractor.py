@@ -102,7 +102,7 @@ def extract_products_from_text(invoice_text: str, api_key: Optional[str] = None)
     import google.generativeai as genai
 
     genai.configure(api_key=key)
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
     prompt = EXTRACTION_PROMPT + cleaned
 
     raw_text = _generate_json(genai, model_name, prompt)

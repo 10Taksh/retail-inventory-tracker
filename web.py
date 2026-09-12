@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from db import enrich_product, get_all_products, get_inventory_stats, init_db
-from watcher import INVOICES_DIR, ingest_pdf, start_watcher, stop_watcher
+from watcher import INVOICES_DIR, get_activity, ingest_pdf, start_watcher, stop_watcher
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,7 @@ def watcher_status() -> dict[str, object]:
     return {
         "running": _watcher_running(),
         "invoices_dir": str(INVOICES_DIR),
+        "activity": get_activity()[:20],
     }
 
 
@@ -112,8 +113,9 @@ def watcher_start() -> dict[str, object]:
             raise HTTPException(500, f"Failed to start watcher: {exc}") from exc
     return {
         "running": True,
-        "message": f"Watching {INVOICES_DIR}",
+        "message": f"Watching {INVOICES_DIR} — existing PDFs are being processed.",
         "invoices_dir": str(INVOICES_DIR),
+        "activity": get_activity()[:20],
     }
 
 
@@ -125,7 +127,7 @@ def watcher_stop() -> dict[str, object]:
             return {"running": False, "message": "Watcher is not running."}
         stop_watcher(_observer)
         _observer = None
-    return {"running": False, "message": "Watcher stopped."}
+    return {"running": False, "message": "Watcher stopped.", "activity": get_activity()[:20]}
 
 
 @app.post("/api/upload")

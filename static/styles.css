@@ -127,9 +127,27 @@ h2 {
   color: var(--forest-ink);
 }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.activity {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.activity li {
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.activity li.error {
+  color: var(--rust);
+}
+
+.activity li.ingest {
+  color: var(--forest);
 }
 
 .dropzone {
