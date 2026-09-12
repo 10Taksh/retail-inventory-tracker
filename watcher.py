@@ -59,29 +59,38 @@ class InvoiceHandler(FileSystemEventHandler):
     def _process(self, path: Path) -> None:
         _wait_for_stable_file(path)
         try:
-            products = extract_products_from_pdf(path)
+            ingest_pdf(path)
+        except Exception:
+            return
+
+
+def ingest_pdf(path: Path) -> dict[str, int | str]:
+    """Extract products from a PDF and upsert them. Returns a small summary."""
+    try:
+        products = extract_products_from_pdf(path)
+    except Exception as exc:
+        logger.exception("Failed to extract products from %s: %s", path.name, exc)
+        raise
+
+    if not products:
+        logger.warning("No products extracted from %s", path.name)
+        return {"stored": 0, "extracted": 0, "file": path.name}
+
+    stored = 0
+    for product in products:
+        try:
+            upsert_product(product["product_name"], product["expiry_date"])
+            stored += 1
         except Exception as exc:
-            logger.exception("Failed to extract products from %s: %s", path.name, exc)
-            return
+            logger.warning(
+                "Skipping %r from %s: %s",
+                product.get("product_name"),
+                path.name,
+                exc,
+            )
 
-        if not products:
-            logger.warning("No products extracted from %s", path.name)
-            return
-
-        stored = 0
-        for product in products:
-            try:
-                upsert_product(product["product_name"], product["expiry_date"])
-                stored += 1
-            except Exception as exc:
-                logger.warning(
-                    "Skipping %r from %s: %s",
-                    product.get("product_name"),
-                    path.name,
-                    exc,
-                )
-
-        logger.info("Stored %s/%s products from %s", stored, len(products), path.name)
+    logger.info("Stored %s/%s products from %s", stored, len(products), path.name)
+    return {"stored": stored, "extracted": len(products), "file": path.name}
 
 
 def _wait_for_stable_file(path: Path, timeout: float = 15.0) -> None:

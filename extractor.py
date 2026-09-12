@@ -92,6 +92,7 @@ def extract_products_from_text(invoice_text: str, api_key: Optional[str] = None)
     if not cleaned:
         return []
 
+    load_dotenv()
     key = api_key or os.getenv("GEMINI_API_KEY")
     if not key:
         raise RuntimeError(

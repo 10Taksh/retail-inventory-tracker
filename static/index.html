@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stockboard — Retail Inventory</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail">
+        <div class="brand">
+          <p class="eyebrow">Retail floor</p>
+          <h1>Stockboard</h1>
+          <p class="lede">
+            Ingest invoice PDFs, then watch expiry dates before product leaves the shelf.
+          </p>
+        </div>
+
+        <section class="panel" id="watcher-panel">
+          <div class="panel-head">
+            <h2>Folder watcher</h2>
+            <span class="pill" id="watcher-pill">offline</span>
+          </div>
+          <p class="hint" id="watcher-hint">
+            Drop PDFs into the invoices folder, or upload here.
+          </p>
+          <div class="btn-row">
+            <button type="button" id="btn-start" class="btn primary">Start</button>
+            <button type="button" id="btn-stop" class="btn">Stop</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Upload invoice</h2>
+          <form id="upload-form" class="dropzone">
+            <input id="file-input" type="file" accept="application/pdf,.pdf" hidden />
+            <p><strong>Choose a PDF</strong> or drop it on this card</p>
+            <p class="hint" id="upload-status">Gemini reads product names and expiry dates.</p>
+            <button type="button" id="btn-browse" class="btn">Browse files</button>
+          </form>
+        </section>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <label class="field">
+            <span>Lookahead</span>
+            <div class="days-wrap">
+              <input id="days" type="number" min="0" value="15" />
+              <span>days</span>
+            </div>
+          </label>
+          <label class="field grow">
+            <span>Search</span>
+            <input id="search" type="search" placeholder="Find a product…" />
+          </label>
+          <button type="button" id="btn-refresh" class="btn">Refresh</button>
+        </header>
+
+        <section class="stats" id="stats">
+          <article class="stat" data-filter="all">
+            <p class="stat-label">On hand</p>
+            <p class="stat-value" id="stat-total">0</p>
+          </article>
+          <article class="stat danger" data-filter="expired">
+            <p class="stat-label">Expired</p>
+            <p class="stat-value" id="stat-expired">0</p>
+          </article>
+          <article class="stat warn" data-filter="soon">
+            <p class="stat-label">Expiring soon</p>
+            <p class="stat-value" id="stat-expiring">0</p>
+          </article>
+          <article class="stat ok" data-filter="healthy">
+            <p class="stat-label">Clear window</p>
+            <p class="stat-value" id="stat-healthy">0</p>
+          </article>
+        </section>
+
+        <nav class="filters" id="filters">
+          <button type="button" class="chip active" data-status="all">All</button>
+          <button type="button" class="chip" data-status="expired">Expired</button>
+          <button type="button" class="chip" data-status="today">Today</button>
+          <button type="button" class="chip" data-status="soon">Soon</button>
+          <button type="button" class="chip" data-status="healthy">Healthy</button>
+        </nav>
+
+        <section class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Expiry</th>
+                <th>Last updated</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="rows">
+              <tr>
+                <td colspan="4" class="empty">Loading inventory…</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

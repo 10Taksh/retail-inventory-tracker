@@ -5,6 +5,7 @@ Retail inventory tracker CLI.
   python main.py           interactive menu
   python main.py watch     start the ./invoices watcher (foreground)
   python main.py query -d 15
+  python main.py serve     browser dashboard at http://127.0.0.1:8000
 """
 
 from __future__ import annotations
@@ -127,6 +128,10 @@ def build_parser() -> argparse.ArgumentParser:
     query = sub.add_parser("query", help="List products expiring soon")
     query.add_argument("-d", "--days", type=int, default=15, help="Lookahead window (default: 15)")
 
+    serve = sub.add_parser("serve", help="Open the browser dashboard")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+
     return parser
 
 
@@ -155,6 +160,13 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(exc, file=sys.stderr)
             return 1
+        return 0
+
+    if args.command == "serve":
+        import uvicorn
+
+        print(f"Dashboard: http://{args.host}:{args.port}")
+        uvicorn.run("web:app", host=args.host, port=args.port, reload=False)
         return 0
 
     parser.print_help()

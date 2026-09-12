@@ -131,3 +131,77 @@ def get_expiring_products(
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def get_all_products(db_path: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Return every inventory row, soonest expiry first."""
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT product_name, expiry_date, last_updated
+            FROM inventory
+            ORDER BY date(expiry_date) ASC, product_name ASC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_inventory_stats(days: int = 15, db_path: Optional[Path] = None) -> dict[str, int]:
+    """Counts for dashboard cards. Date math stays in SQL."""
+    if days < 0:
+        raise ValueError("days must be >= 0")
+
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN date(expiry_date) < date('now') THEN 1 ELSE 0 END) AS expired,
+                SUM(
+                    CASE
+                        WHEN date(expiry_date) >= date('now')
+                         AND date(expiry_date) <= date('now', ?)
+                        THEN 1 ELSE 0
+                    END
+                ) AS expiring,
+                SUM(CASE WHEN date(expiry_date) > date('now', ?) THEN 1 ELSE 0 END) AS healthy
+            FROM inventory
+            """,
+            (f"+{int(days)} days", f"+{int(days)} days"),
+        ).fetchone()
+
+    return {
+        "total": int(row["total"] or 0),
+        "expired": int(row["expired"] or 0),
+        "expiring": int(row["expiring"] or 0),
+        "healthy": int(row["healthy"] or 0),
+    }
+
+
+def enrich_product(
+    row: dict[str, Any],
+    days: int = 15,
+    today: Optional[date] = None,
+) -> dict[str, Any]:
+    """Add remaining-days and a status label for the UI/CLI."""
+    as_of = today or date.today()
+    expiry = date.fromisoformat(str(row["expiry_date"]))
+    remaining = (expiry - as_of).days
+    if remaining < 0:
+        status = "expired"
+        label = f"Expired {abs(remaining)}d ago"
+    elif remaining == 0:
+        status = "today"
+        label = "Expires today"
+    else:
+        status = "expiring" if remaining <= days else "healthy"
+        label = f"{remaining}d left"
+
+    return {
+        **row,
+        "days_remaining": remaining,
+        "status": status,
+        "status_label": label,
+    }
