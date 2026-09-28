@@ -69,9 +69,11 @@ mkdir -p "$APP_DIR" "$DATA_DIR/invoices" "$DATA_DIR/backups"
 
 echo "==> Fetching the app ($REPO_URL @ $BRANCH)"
 if [[ -d "$APP_DIR/.git" ]]; then
-  git -C "$APP_DIR" fetch --quiet origin
-  git -C "$APP_DIR" checkout --quiet "$BRANCH"
-  git -C "$APP_DIR" reset --quiet --hard "origin/$BRANCH"
+  # The checkout belongs to the service user; tell root's git that is expected.
+  git_app() { git -c safe.directory="$APP_DIR" -C "$APP_DIR" "$@"; }
+  git_app fetch --quiet origin
+  git_app checkout --quiet "$BRANCH"
+  git_app reset --quiet --hard "origin/$BRANCH"
 else
   git clone --quiet --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 fi
