@@ -1,0 +1,30 @@
+{
+  "source": "sample-invoice.pdf",
+  "products": [
+    {
+      "product_name": "Fresh Spinach Pre-washed, 16oz bags",
+      "expiry_date": "2026-09-15",
+      "last_updated": "2026-09-12 17:49:07"
+    },
+    {
+      "product_name": "Sourdough Bread Artisan Baked, 800g",
+      "expiry_date": "2026-09-17",
+      "last_updated": "2026-09-12 17:49:07"
+    },
+    {
+      "product_name": "Organic Whole Milk 1 Gallon Jugs",
+      "expiry_date": "2026-09-25",
+      "last_updated": "2026-09-12 17:49:07"
+    },
+    {
+      "product_name": "Cheddar Cheese Medium block, 500g",
+      "expiry_date": "2026-12-01",
+      "last_updated": "2026-09-12 17:49:07"
+    },
+    {
+      "product_name": "Coca-Cola 12-pack 12 x 355ml Cans",
+      "expiry_date": "2027-08-15",
+      "last_updated": "2026-09-12 17:49:07"
+    }
+  ]
+}

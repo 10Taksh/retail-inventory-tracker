@@ -192,6 +192,15 @@ zone.addEventListener("drop", (e) => {
   onUpload(file);
 });
 
+api("/api/config")
+  .then((config) => {
+    if (!config.demo) return;
+    $("demo-panel").hidden = false;
+    $("watcher-panel").hidden = true;
+    $("upload-panel").hidden = true;
+  })
+  .catch(() => {});
+
 refresh().catch((err) => {
   $("rows").innerHTML = `<tr><td colspan="4" class="empty">${escapeHtml(err.message)}</td></tr>`;
 });

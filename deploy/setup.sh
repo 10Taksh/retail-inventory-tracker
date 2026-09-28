@@ -7,6 +7,8 @@
 # Optional:
 #   DOMAIN=inventory.example.com        serve HTTPS for that hostname (remembered for later runs)
 #   AUTH_USER=admin AUTH_PASS=secret    set (or change) the site login; one is generated otherwise
+#   DEMO=1                              public read-only demo: sample data, no login, no API key
+#                                       (remembered for later runs; DEMO=0 switches back)
 
 set -euo pipefail
 
@@ -19,6 +21,8 @@ AUTH_FILE=/etc/retail-inventory.auth
 DOMAIN="${DOMAIN:-}"
 AUTH_USER="${AUTH_USER:-}"
 AUTH_PASS="${AUTH_PASS:-}"
+DEMO="${DEMO:-}"
+DEMO_FILE=/etc/retail-inventory.demo
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run with sudo." >&2
@@ -83,6 +87,15 @@ if [[ ! -f "$ENV_FILE" ]]; then
   chmod 600 "$ENV_FILE"
 fi
 
+# Remember the demo choice so plain re-runs (to deploy updates) keep it.
+if [[ "$DEMO" == 1 ]]; then touch "$DEMO_FILE"; elif [[ "$DEMO" == 0 ]]; then rm -f "$DEMO_FILE"; fi
+if [[ -f "$DEMO_FILE" ]]; then DEMO_MODE=1; else DEMO_MODE=0; fi
+if grep -q '^DEMO_MODE=' "$ENV_FILE"; then
+  sed -i "s/^DEMO_MODE=.*/DEMO_MODE=$DEMO_MODE/" "$ENV_FILE"
+else
+  echo "DEMO_MODE=$DEMO_MODE" >> "$ENV_FILE"
+fi
+
 chown -R inventory:inventory "$APP_DIR" "$DATA_DIR"
 
 echo "==> Installing the systemd service"
@@ -93,7 +106,9 @@ systemctl restart retail-inventory
 
 echo "==> Configuring the site login"
 NEW_PASSWORD=""
-if [[ -n "$AUTH_PASS" || ! -f "$AUTH_FILE" ]]; then
+if [[ "$DEMO_MODE" == 1 ]]; then
+  echo "    (demo mode: the site is public, no login)"
+elif [[ -n "$AUTH_PASS" || ! -f "$AUTH_FILE" ]]; then
   AUTH_USER="${AUTH_USER:-admin}"
   if [[ -z "$AUTH_PASS" ]]; then
     AUTH_PASS=$(python3 -c 'import secrets; print(secrets.token_urlsafe(12))')
@@ -102,18 +117,25 @@ if [[ -n "$AUTH_PASS" || ! -f "$AUTH_FILE" ]]; then
   printf '%s\n%s\n' "$AUTH_USER" "$(caddy hash-password --plaintext "$AUTH_PASS")" > "$AUTH_FILE"
   chmod 600 "$AUTH_FILE"
 fi
-AUTH_USER=$(sed -n 1p "$AUTH_FILE")
-AUTH_HASH=$(sed -n 2p "$AUTH_FILE")
+if [[ "$DEMO_MODE" == 0 ]]; then
+  AUTH_USER=$(sed -n 1p "$AUTH_FILE")
+  AUTH_HASH=$(sed -n 2p "$AUTH_FILE")
+fi
 
 echo "==> Configuring Caddy"
 # Remember the domain so plain re-runs (to deploy updates) keep serving HTTPS.
 DOMAIN_FILE=/etc/retail-inventory.domain
 if [[ -n "$DOMAIN" ]]; then echo "$DOMAIN" > "$DOMAIN_FILE"; elif [[ -f "$DOMAIN_FILE" ]]; then DOMAIN=$(cat "$DOMAIN_FILE"); fi
 SITE="${DOMAIN:-:80}"
-sed -e "s|^:80 {|$SITE {|" \
-    -e "s|__AUTH_USER__|$AUTH_USER|" \
-    -e "s|__AUTH_HASH__|$AUTH_HASH|" \
-  "$APP_DIR/deploy/Caddyfile" > /etc/caddy/Caddyfile
+if [[ "$DEMO_MODE" == 1 ]]; then
+  sed -e "s|^:80 {|$SITE {|" -e '/# auth-start/,/# auth-end/d' \
+    "$APP_DIR/deploy/Caddyfile" > /etc/caddy/Caddyfile
+else
+  sed -e "s|^:80 {|$SITE {|" \
+      -e "s|__AUTH_USER__|$AUTH_USER|" \
+      -e "s|__AUTH_HASH__|$AUTH_HASH|" \
+    "$APP_DIR/deploy/Caddyfile" > /etc/caddy/Caddyfile
+fi
 mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
 systemctl enable --now caddy
 systemctl reload caddy || systemctl restart caddy
@@ -131,12 +153,14 @@ curl -fsS http://127.0.0.1:8000/api/health && echo
 PUBLIC_IP=$(curl -fsS --max-time 3 -H 'Authorization: Bearer Oracle' http://169.254.169.254/opc/v2/vnics/ 2>/dev/null | python3 -c 'import json,sys; v=json.load(sys.stdin); print(next((x.get("publicIp") for x in v if x.get("publicIp")), ""))' 2>/dev/null || true)
 PUBLIC_IP=${PUBLIC_IP:-$(curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || true)}
 if [[ -n "$DOMAIN" ]]; then echo "Open: https://$DOMAIN/"; else echo "Open: http://${PUBLIC_IP:-<your-public-ip>}/"; fi
-if [[ -n "$NEW_PASSWORD" ]]; then
+if [[ "$DEMO_MODE" == 1 ]]; then
+  echo "Public demo mode: no login, uploads off, sample data only."
+elif [[ -n "$NEW_PASSWORD" ]]; then
   echo "Login: $AUTH_USER / $NEW_PASSWORD   (shown once - save it now)"
 else
   echo "Login: $AUTH_USER (password unchanged; set a new one with: sudo AUTH_PASS=... bash $APP_DIR/deploy/setup.sh)"
 fi
-if ! grep -qE '^GEMINI_API_KEY=.+' "$ENV_FILE"; then
+if [[ "$DEMO_MODE" == 0 ]] && ! grep -qE '^GEMINI_API_KEY=.+' "$ENV_FILE"; then
   echo
   echo "!! GEMINI_API_KEY is not set - uploads will fail until you add it:"
   echo "   sudo nano $ENV_FILE    then    sudo systemctl restart retail-inventory"

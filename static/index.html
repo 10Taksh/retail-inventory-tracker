@@ -23,6 +23,25 @@
           </p>
         </div>
 
+        <section class="panel demo" id="demo-panel" hidden>
+          <div class="panel-head">
+            <h2>Live demo</h2>
+            <span class="pill on">sample data</span>
+          </div>
+          <p class="hint">
+            This table shows what Gemini extracted from one sample supplier invoice. Uploads are
+            turned off here, so the public site never uses an API key.
+          </p>
+          <a class="btn primary" href="/sample-invoice.pdf" target="_blank" rel="noopener">View the sample invoice (PDF)</a>
+          <ol class="steps">
+            <li>A PDF lands in the invoices folder or is uploaded.</li>
+            <li>The text is read and Gemini returns each product with its expiry date as JSON.</li>
+            <li>Products are saved to SQLite; a new delivery replaces the old expiry date.</li>
+            <li>The dashboard flags expired and soon-to-expire stock.</li>
+          </ol>
+          <a class="btn" href="https://github.com/10Taksh/retail-inventory-tracker" target="_blank" rel="noopener">Source code on GitHub</a>
+        </section>
+
         <section class="panel" id="watcher-panel">
           <div class="panel-head">
             <h2>Folder watcher</h2>
@@ -38,7 +57,7 @@
           <ol class="activity" id="activity"></ol>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="upload-panel">
           <h2>Upload invoice</h2>
           <form id="upload-form" class="dropzone">
             <input id="file-input" type="file" accept="application/pdf,.pdf" hidden />

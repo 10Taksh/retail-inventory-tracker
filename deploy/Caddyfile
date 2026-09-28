@@ -1,16 +1,19 @@
 # Reverse proxy in front of uvicorn.
 #
 # setup.sh replaces ":80" with DOMAIN when one is given (Caddy then fetches HTTPS
-# certificates automatically) and fills in the login below.
+# certificates automatically) and fills in the login below (or removes it with DEMO=1).
 
 :80 {
     encode gzip zstd
 
     # The app has no accounts of its own, and every upload spends Gemini quota,
-    # so the whole site sits behind a single login.
+    # so the whole site sits behind a single login. setup.sh drops this block in demo mode,
+    # where uploads are turned off and the site is public.
+    # auth-start
     basic_auth {
         __AUTH_USER__ __AUTH_HASH__
     }
+    # auth-end
 
     # Invoice PDFs; the app itself rejects empty files and non-PDFs.
     request_body {
