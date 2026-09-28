@@ -7,14 +7,15 @@ fresh shipment replaces the previous rotation date without creating duplicates.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterator, Optional, Union
 
-# Keep the DB next to the project so queries stay local and portable.
-DB_PATH = Path(__file__).resolve().parent / "inventory.db"
+# Keep the DB next to the project by default; DATABASE_PATH moves it (e.g. onto a server's data dir).
+DB_PATH = Path(os.getenv("DATABASE_PATH") or Path(__file__).resolve().parent / "inventory.db")
 
 DateLike = Union[str, date, datetime]
 

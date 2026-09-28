@@ -1,0 +1,25 @@
+# Reverse proxy in front of uvicorn.
+#
+# setup.sh replaces ":80" with DOMAIN when one is given (Caddy then fetches HTTPS
+# certificates automatically) and fills in the login below.
+
+:80 {
+    encode gzip zstd
+
+    # The app has no accounts of its own, and every upload spends Gemini quota,
+    # so the whole site sits behind a single login.
+    basic_auth {
+        __AUTH_USER__ __AUTH_HASH__
+    }
+
+    # Invoice PDFs; the app itself rejects empty files and non-PDFs.
+    request_body {
+        max_size 25MB
+    }
+
+    reverse_proxy 127.0.0.1:8000
+
+    log {
+        output file /var/log/caddy/retail-inventory.log
+    }
+}

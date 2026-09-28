@@ -5,6 +5,7 @@ Watch ./invoices for new PDFs and upsert extracted products into SQLite.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -25,7 +26,7 @@ from extractor import extract_products_from_pdf
 
 logger = logging.getLogger(__name__)
 
-INVOICES_DIR = Path(__file__).resolve().parent / "invoices"
+INVOICES_DIR = Path(os.getenv("INVOICES_DIR") or Path(__file__).resolve().parent / "invoices")
 
 # Drop-in copies are often still being written when the create event fires.
 WRITE_SETTLE_SECONDS = 1.5

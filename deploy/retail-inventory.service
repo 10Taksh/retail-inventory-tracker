@@ -1,0 +1,26 @@
+[Unit]
+Description=Retail Inventory Tracker (uvicorn)
+After=network.target
+
+[Service]
+User=inventory
+Group=inventory
+WorkingDirectory=/opt/retail-inventory
+EnvironmentFile=/etc/retail-inventory.env
+# One worker only: the folder watcher and activity log live in process memory,
+# so a second worker would show a different watcher state on every other request.
+ExecStart=/opt/retail-inventory/.venv/bin/uvicorn web:app \
+    --host 127.0.0.1 --port 8000 \
+    --workers 1 --proxy-headers
+Restart=always
+RestartSec=3
+
+# Hardening: the service can only write to its data directory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/retail-inventory
+
+[Install]
+WantedBy=multi-user.target
